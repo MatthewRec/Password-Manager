@@ -1,0 +1,139 @@
+# ---------------------------------------------------------------------------
+# Vaultwarden + Cloudflare Tunnel
+#
+# Design note: vaultwarden publishes NO host port. It is reachable only from
+# the cloudflared container over an internal Docker network. There is no
+# port-forward on the router and nothing listening on the LAN - cloudflared
+# dials OUT to Cloudflare and the traffic comes back down that connection.
+#
+# Verify that claim after bringing the stack up:
+#   ss -tlnp | grep -E '(:80|:8080|:3012)'    # should return nothing
+# ---------------------------------------------------------------------------
+
+services:
+
+  vaultwarden:
+    # Pinned deliberately. `latest` is fine for a toy; a vault is not a toy,
+    # and an unattended pull that changes the schema mid-week is not a
+    # surprise you want. Bump this on purpose, after a snapshot. Check
+    # https://github.com/dani-garcia/vaultwarden/releases before changing.
+    image: vaultwarden/server:1.34.3
+    container_name: vaultwarden
+    restart: unless-stopped
+
+    # No `ports:` stanza. This is intentional - see the design note above.
+    # Adding one would defeat the entire network model.
+
+    networks:
+      - vault_internal
+      - egress          # needed for SMTP, HIBP checks, and push. See README
+                        # "Locking down egress" to remove this.
+
+    volumes:
+      - ./vw-data:/data
+
+    environment:
+      # --- Identity -------------------------------------------------------
+      # Must be https, and must match the Cloudflare public hostname exactly.
+      # Attachments, WebAuthn, and email links all derive URLs from this.
+      DOMAIN: ${DOMAIN:?DOMAIN is required - see .env.example}
+
+      # --- Who may hold an account ----------------------------------------
+      # This is the control that enforces "no one else can create an account".
+      # Set true ONLY for the minutes it takes to register your own account,
+      # then set false and `docker compose up -d` again.
+      SIGNUPS_ALLOWED:   ${SIGNUPS_ALLOWED:-false}
+      SIGNUPS_VERIFY:    ${SIGNUPS_VERIFY:-true}
+      INVITATIONS_ALLOWED: ${INVITATIONS_ALLOWED:-true}
+      # Belt and braces: even if SIGNUPS_ALLOWED is flipped on by accident,
+      # only these email domains can register. Leave blank to disable.
+      SIGNUPS_DOMAINS_WHITELIST: ${SIGNUPS_DOMAINS_WHITELIST:-}
+      # Only these users may create organizations. "none" locks it entirely.
+      ORG_CREATION_USERS: ${ORG_CREATION_USERS:-}
+
+      # --- Admin panel ----------------------------------------------------
+      # Store the ARGON2 HASH, not the plaintext token. Generate with:
+      #   docker run --rm -it vaultwarden/server:1.34.3 /vaultwarden hash
+      # Cloudflare Access sits in front of /admin as a second, independent
+      # gate - this token is not the only thing standing there.
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?ADMIN_TOKEN is required - see .env.example}
+
+      # --- Password-hint leakage ------------------------------------------
+      # Both false. A password hint shown to an unauthenticated caller
+      # confirms the account exists and leaks a clue about the master
+      # password. Not worth it.
+      SHOW_PASSWORD_HINT:    "false"
+      PASSWORD_HINTS_ALLOWED: "false"
+
+      # --- Features -------------------------------------------------------
+      WEB_VAULT_ENABLED:       ${WEB_VAULT_ENABLED:-true}
+      SENDS_ALLOWED:           ${SENDS_ALLOWED:-true}
+      EMERGENCY_ACCESS_ALLOWED: ${EMERGENCY_ACCESS_ALLOWED:-true}
+
+      # Icons are fetched from the sites you store logins for. "internal"
+      # proxies them through the server; set DISABLE_ICON_DOWNLOAD=true if
+      # you would rather the server never touch those domains at all (it is
+      # a small metadata leak to whoever watches the server's egress).
+      ICON_SERVICE:          ${ICON_SERVICE:-internal}
+      DISABLE_ICON_DOWNLOAD: ${DISABLE_ICON_DOWNLOAD:-false}
+
+      # --- Mobile push (optional) -----------------------------------------
+      # Without this, mobile apps sync on open/poll rather than instantly.
+      # Browser extensions use WebSockets and do not need it.
+      PUSH_ENABLED:          ${PUSH_ENABLED:-false}
+      PUSH_INSTALLATION_ID:  ${PUSH_INSTALLATION_ID:-}
+      PUSH_INSTALLATION_KEY: ${PUSH_INSTALLATION_KEY:-}
+
+      # --- SMTP (needed for invitations and email 2FA) ---------------------
+      SMTP_HOST:     ${SMTP_HOST:-}
+      SMTP_FROM:     ${SMTP_FROM:-}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-Vaultwarden}
+      SMTP_PORT:     ${SMTP_PORT:-587}
+      SMTP_SECURITY: ${SMTP_SECURITY:-starttls}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+
+      # --- Logging ---------------------------------------------------------
+      # EXTENDED_LOGGING plus a real log file is what makes failed-login
+      # bursts greppable and shippable to a SIEM. See README "Monitoring".
+      LOG_LEVEL:        ${LOG_LEVEL:-info}
+      LOG_FILE:         /data/vaultwarden.log
+      EXTENDED_LOGGING: "true"
+
+    # The vaultwarden image ships its own HEALTHCHECK against /alive, so one
+    # is not redeclared here. `docker compose ps` will show health regardless.
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    networks:
+      - vault_internal
+      - egress
+    environment:
+      # Token from the Cloudflare Zero Trust dashboard. The tunnel's ingress
+      # rules are configured there (dashboard-managed tunnel), pointing
+      # vault.<yourdomain> -> http://vaultwarden:80
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?TUNNEL_TOKEN is required - see .env.example}
+    depends_on:
+      - vaultwarden
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  # No route off the host. Only containers on this network can reach
+  # vaultwarden, and there is exactly one: cloudflared.
+  vault_internal:
+    internal: true
+  # Ordinary bridge, for outbound only. Nothing is published on it.
+  egress:

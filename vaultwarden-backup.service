@@ -1,0 +1,21 @@
+[Unit]
+Description=Vaultwarden encrypted backup
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+# Adjust User and WorkingDirectory to match where you cloned the repo.
+User=vault
+WorkingDirectory=/opt/vaultwarden
+ExecStart=/opt/vaultwarden/backup.sh
+
+# Failures must be loud. Without this the timer fails silently for months
+# and you discover it on the day you need the backup.
+StandardOutput=journal
+StandardError=journal
+
+# Modest hardening for a script that handles plaintext vault data.
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=full

@@ -1,0 +1,12 @@
+[Unit]
+Description=Nightly Vaultwarden backup
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+# Avoids every homelab box hammering the NAS at exactly 03:00.
+RandomizedDelaySec=15m
+# If the VM was off at 03:00, run at next boot rather than skipping the day.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

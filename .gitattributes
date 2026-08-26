@@ -1,0 +1,7 @@
+# These files are authored on Windows but executed on Debian. Without this,
+# CRLF line endings break the shebang line and every script fails with a
+# cryptic "bad interpreter: /bin/bash^M".
+*.sh   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+.env.example text eol=lf
