@@ -6,8 +6,7 @@ Works with the official Bitwarden extensions in Chrome, Edge, Brave, and Safari,
 across every signed-in device, and supports multiple user accounts whose vaults are
 cryptographically segregated from one another.
 
-Read Steps 0–8 for how to build it. [THREAT-MODEL.md](THREAT-MODEL.md) covers what this
-design protects against.
+Read Steps 0–8 for how to build it.
 
 ---
 
