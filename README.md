@@ -6,7 +6,8 @@ Using bitwarden extension to allow for chromium and safari browers, these passwo
 IS NOT COMPLETE
 ------------
 
-------------
+#Netflow
+
 Internet ──> Cloudflare edge ──(outbound-only tunnel)──> cloudflared container
                                                               │ internal docker network
                                                               ▼   (no host route)
@@ -15,5 +16,5 @@ Internet ──> Cloudflare edge ──(outbound-only tunnel)──> cloudflared
                                                         ./vw-data
                                                               │
                                         Debian VM on Proxmox ─┴─> nightly encrypted backups
-------------
+
 
