@@ -7,7 +7,7 @@ across every signed-in device, and supports multiple user accounts whose vaults 
 cryptographically segregated from one another.
 
 Read Steps 0–8 for how to build it. [THREAT-MODEL.md](THREAT-MODEL.md) covers what this
-design protects against and — just as importantly — what it does not.
+design protects against.
 
 ---
 
@@ -19,7 +19,7 @@ four, and does so with cryptography that has been audited and clients that have 
 attacked in the wild for years.
 
 Writing a password manager from scratch means writing its cryptography. That is the one
-category of software where original work is a liability rather than a credential — a subtle
+category of software where original work is a liability rather than a credential a subtle
 error in key derivation or IV reuse is invisible in testing and total in effect.
 
 So the engineering moved off the vault and onto the infrastructure around it: VM isolation,
@@ -43,7 +43,7 @@ Internet ──> Cloudflare edge ──(outbound-only tunnel)──> cloudflared
 
 Three decisions carry the design:
 
-1. **Docker in a dedicated Debian VM** — not on the Proxmox host, not in an LXC container.
+1. **Docker in a dedicated Debian VM** not on the Proxmox host, not in an LXC container.
    Installing Docker on the hypervisor contaminates it; Docker-in-LXC needs nesting plus
    keyctl and breaks in unobvious ways on upgrade. A VM gives a clean blast radius and lets
    you snapshot the entire vault host before every change.
@@ -54,12 +54,12 @@ Three decisions carry the design:
    rather than assuming it.
 
 3. **Cloudflare Access guards `/admin` only.** Putting SSO in front of the whole hostname
-   is the most common way people break this setup — the Bitwarden extensions and mobile
+   is the most common way people break this setup the Bitwarden extensions and mobile
    apps cannot complete an interactive login challenge, so `/api`, `/identity`, and
    `/notifications` must stay reachable. Only the admin panel gets the SSO wrapper.
 
 **On the Cloudflare trust boundary, stated plainly:** Cloudflare terminates TLS and sees
-your request metadata — which accounts sync, when, from where. It does **not** see your
+your request metadata which accounts sync, when, from where. It does **not** see your
 secrets. Vault items are encrypted on your device under a key derived from your master
 password, which never leaves it. Cloudflare and the server both handle ciphertext only.
 If that metadata exposure is unacceptable, swap the tunnel for WireGuard or Tailscale;
@@ -76,7 +76,7 @@ needs no developer account. All four browsers are covered with zero client-side 
 
 ---
 
-## Step 0 — Repository
+## Step 0 Repository
 
 On your workstation:
 
@@ -88,12 +88,12 @@ git commit -m "Vaultwarden homelab stack"
 ```
 
 Push to a **private** repo. `.gitignore` already excludes `.env`, `vw-data/`, and every
-backup artifact — but confirm `git status` is clean of secrets before the first push, not
+backup artifact but confirm `git status` is clean of secrets before the first push, not
 after. `preflight.sh` checks this too.
 
-## Step 1 — Provision the VM on Proxmox
+## Step 1 Provision the VM on Proxmox
 
-Debian 13 (or 12), **2 vCPU / 2GB RAM / 20GB disk** — generous; Vaultwarden idles around
+Debian 13 (or 12), **2 vCPU / 2GB RAM / 20GB disk** generous; Vaultwarden idles around
 10MB of RAM.
 
 ```bash
@@ -120,9 +120,9 @@ sudo dpkg-reconfigure -plow unattended-upgrades
 
 **Take a Proxmox snapshot now**, before Docker exists. It is your clean rollback point.
 
-## Step 2 — Docker and the stack
+## Step 2 Docker and the stack
 
-Install Docker Engine from Docker's own apt repository — not Debian's `docker.io`, which
+Install Docker Engine from Docker's own apt repository not Debian's `docker.io`, which
 lags badly:
 
 ```bash
@@ -138,7 +138,7 @@ cp .env.example .env
 chmod 600 .env
 ```
 
-Generate the admin token as an **Argon2 hash**, not plaintext — a plaintext token is
+Generate the admin token as an **Argon2 hash**, not plaintext a plaintext token is
 readable through `docker inspect` and any read of `.env`:
 
 ```bash
@@ -151,20 +151,20 @@ Compose will try to expand the `$` signs.
 Fill in `DOMAIN` (https, no trailing slash), `TUNNEL_TOKEN` (Step 3), and the SMTP block
 if you want invitations and email 2FA.
 
-## Step 3 — Cloudflare
+## Step 3 Cloudflare
 
 1. Zero Trust → **Networks → Tunnels → Create a tunnel** (Cloudflared). Copy the token
    into `TUNNEL_TOKEN` in `.env`.
 2. **Public hostname**: `vault.yourdomain.com` → Service `HTTP` → `vaultwarden:80`.
-   That hostname resolves over the internal Docker network — it is the container name,
+   That hostname resolves over the internal Docker network it is the container name,
    not a DNS record you create.
 3. **Access application scoped to `/admin*` only.** Application path `vault.yourdomain.com/admin`,
    policy = your email. Do **not** scope it to the whole hostname; that breaks every client.
-4. **WAF rate-limiting rule on `/identity/connect/token`** — this is the master-password
+4. **WAF rate-limiting rule on `/identity/connect/token`** this is the master-password
    brute-force path and the highest-value rule you will write here. Something like 10
    requests per minute per IP, block for 10 minutes.
 
-## Step 4 — Bring it up and create accounts
+## Step 4 Bring it up and create accounts
 
 ```bash
 ./preflight.sh          # changes nothing; resolve every FAIL before continuing
@@ -176,7 +176,7 @@ docker compose ps       # both containers, vaultwarden healthy
 Temporarily set `SIGNUPS_ALLOWED=true` in `.env`, `docker compose up -d`, register at
 `https://vault.yourdomain.com`, then **set it straight back to `false`** and
 `docker compose up -d` again. This is the control that enforces "no one else can create an
-account" — `preflight.sh` warns whenever it is left on.
+account" `preflight.sh` warns whenever it is left on.
 
 ### 4.2 Add your other users
 From `/admin` (behind Cloudflare Access), invite by email. Each user sets their own master
@@ -191,7 +191,7 @@ In every account's **Settings → Security → Keys**:
 
 ### 4.4 Verify segregation empirically
 
-Don't assert it — demonstrate it. As a second user's data sits in the same SQLite file:
+Don't assert it demonstrate it. As a second user's data sits in the same SQLite file:
 
 ```bash
 sqlite3 vw-data/db.sqlite3 \
@@ -199,28 +199,28 @@ sqlite3 vw-data/db.sqlite3 \
 ```
 
 Every `data` column is opaque base64, including for accounts that are not yours, and there
-is no server-side key that decrypts it — each user's vault key is wrapped under a key
+is no server-side key that decrypts it each user's vault key is wrapped under a key
 derived from their own master password. **Screenshot this.** It is the single most
 convincing artifact in the repo, because it shows the segregation is cryptographic rather
 than a permission check that a bug could bypass.
 
-## Step 5 — Clients
+## Step 5 Clients
 
-**Chrome / Edge / Brave** — one Chromium extension covers all three; install from each
+**Chrome / Edge / Brave** one Chromium extension covers all three; install from each
 browser's store.
 
-**Safari** — install **Bitwarden from the Mac App Store**; the extension ships inside the
+**Safari** install **Bitwarden from the Mac App Store**; the extension ships inside the
 desktop app. Then Safari → Settings → Extensions → enable Bitwarden.
 
 **In every client, before logging in**: on the login screen, open the settings/gear icon,
 choose **Self-hosted environment**, and set the Server URL to `https://vault.yourdomain.com`.
-This is the step everyone misses — logging in first will fail against bitwarden.com.
+This is the step everyone misses logging in first will fail against bitwarden.com.
 
 Confirm sync by adding an item on one device and watching it appear on another within
 seconds. Browser extensions use WebSockets over the main HTTP port; recent Vaultwarden
 serves those without the separate `3012` mapping older guides mention.
 
-## Step 6 — Backups
+## Step 6 Backups
 
 ```bash
 sudo cp systemd/vaultwarden-backup.* /etc/systemd/system/
@@ -240,18 +240,18 @@ decryption key lives on the box you are backing up, you do not have a backup.
 
 What [`backup.sh`](backup.sh) does that a naive script does not:
 - Captures the database with `sqlite3 .backup`, **never `cp`**. A live SQLite file copied
-  mid-write produces an archive that restores cleanly and is silently corrupt — you find
+  mid-write produces an archive that restores cleanly and is silently corrupt you find
   out during an outage.
 - Runs `PRAGMA integrity_check` on the snapshot before archiving it.
 - Includes `rsa_key*`, `config.json`, `attachments/`, and `sends/`. **None of these are in
   the database.** Restoring `db.sqlite3` alone logs every device out and loses every file
-  attachment — a "successful" restore that has quietly lost data.
+  attachment a "successful" restore that has quietly lost data.
 - Encrypts, checksums, ships off-box, prunes to `BACKUP_RETENTION_DAYS`, and fails loudly
   if the off-box copy fails.
 
 Layer Proxmox VM backups underneath for bare-metal recovery.
 
-## Step 7 — Rehearse the restore
+## Step 7 Rehearse the restore
 
 The step that separates this from every other homelab writeup. Quarterly, restore the
 latest archive onto a throwaway VM and confirm the vault actually decrypts in a real client:
@@ -269,7 +269,7 @@ An untested backup is a hypothesis. Record each drill below.
 | --- | --- | --- | --- |
 | _pending_ | | | Run the first drill within a week of going live |
 
-## Step 8 — Verify the security claims
+## Step 8 Verify the security claims
 
 Don't take the architecture section's word for it:
 
@@ -290,7 +290,7 @@ curl -sI https://vault.yourdomain.com/admin | head -1   # Cloudflare Access chal
 Also confirm your router has **no** port-forward to this VM. If one exists, the entire
 network model in §2 of the threat model is void.
 
-## Step 9 — Monitoring and updates
+## Step 9 Monitoring and updates
 
 `EXTENDED_LOGGING` and `/data/vaultwarden.log` make failed-login bursts greppable:
 
@@ -303,7 +303,7 @@ in the threat model.
 
 **Updates**: snapshot the VM first, then bump the pinned tag in `docker-compose.yml`
 deliberately and `docker compose up -d`. Do not point a vault at `:latest` with an
-auto-updater — check the [release notes](https://github.com/dani-garcia/vaultwarden/releases)
+auto-updater check the [release notes](https://github.com/dani-garcia/vaultwarden/releases)
 for schema changes before each bump.
 
 ---
@@ -325,8 +325,8 @@ for schema changes before each bump.
 | Symptom | Cause |
 | --- | --- |
 | Client says "server URL invalid" | Self-hosted environment not set, or `DOMAIN` mismatch. It must match the Cloudflare hostname exactly, https, no trailing slash. |
-| Extension logs in but never syncs | Cloudflare Access scoped too broadly — it must cover `/admin*` only. |
-| TOTP codes always rejected | Clock skew on the VM. `timedatectl` — `preflight.sh` checks this. |
+| Extension logs in but never syncs | Cloudflare Access scoped too broadly it must cover `/admin*` only. |
+| TOTP codes always rejected | Clock skew on the VM. `timedatectl` `preflight.sh` checks this. |
 | Attachments fail to upload | `DOMAIN` is `http://` rather than `https://`. |
 | `bad interpreter: /bin/bash^M` | Scripts copied from Windows with CRLF. `.gitattributes` prevents it via git; otherwise `dos2unix *.sh`. |
 | Admin panel rejects the token | `ADMIN_TOKEN` not single-quoted in `.env`, so Compose ate the `$` signs. |
